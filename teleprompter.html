@@ -1070,6 +1070,17 @@ function toggleLock(){
   },{passive:true});
   ov.addEventListener('touchend',()=>clearTimeout(lockTimer),{passive:true});
   ov.addEventListener('touchcancel',()=>clearTimeout(lockTimer),{passive:true});
+
+  // Muis-support voor desktop
+  ov.addEventListener('mousedown',()=>{
+    lockTimer=setTimeout(()=>{
+      S.locked=false;
+      ov.classList.remove('active');
+      document.getElementById('lock-btn').textContent='🔓';
+    },2000);
+  });
+  ov.addEventListener('mouseup',()=>clearTimeout(lockTimer));
+  ov.addEventListener('mouseleave',()=>clearTimeout(lockTimer));
 })();
 
 // ═══════════════════════════════════════════════════════════════
