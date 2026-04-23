@@ -1445,6 +1445,24 @@ function setupKeyboard(){
     touchScrolling=false;
     tCount=e.touches.length;
   },{passive:true});
+
+  // ── Muis-drag voor desktop/browser testen ──────────────────────
+  let mouseDown=false, mouseLastY=0;
+  scr.addEventListener('mousedown',e=>{
+    if(S.locked) return;
+    mouseDown=true;
+    mouseLastY=e.clientY;
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove',e=>{
+    if(!mouseDown||S.locked) return;
+    const dy=mouseLastY-e.clientY;
+    mouseLastY=e.clientY;
+    S.scrollY=Math.max(0,Math.min(totalH,S.scrollY+dy*2.5));
+    applyScroll();
+    refreshProgress();
+  });
+  window.addEventListener('mouseup',()=>{ mouseDown=false; });
 })();
 
 // ═══════════════════════════════════════════════════════════════
