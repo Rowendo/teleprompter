@@ -1027,16 +1027,11 @@ function applyControlsVis(){
 }
 
 function peekControls(){
-  if(S.controlsVis) return;
-  document.getElementById('controls-overlay').classList.remove('hidden');
-  document.getElementById('prompter-topbar').classList.remove('hidden');
-  clearTimeout(hideTimer);
-  hideTimer=setTimeout(()=>{
-    if(!S.controlsVis){
-      document.getElementById('controls-overlay').classList.add('hidden');
-      document.getElementById('prompter-topbar').classList.add('hidden');
-    }
-  },3000);
+  // Tappen als controls verborgen zijn = permanent terugbrengen
+  if(!S.controlsVis){
+    S.controlsVis=true;
+    applyControlsVis();
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1170,10 +1165,10 @@ function applyStyles(){
     txt.style.paddingRight=S.marginX+'px';
   }
 
-  // Mirror
+  // Mirror — alleen de tekstcontainer, niet de controls
   const mx=S.mirrorH?'scaleX(-1)':'';
   const my=S.mirrorV?'scaleY(-1)':'';
-  pv.style.transform=[mx,my].filter(Boolean).join(' ')||'none';
+  document.getElementById('prompter-scroll').style.transform=[mx,my].filter(Boolean).join(' ')||'none';
 
   // Reading guide
   const rg=document.getElementById('reading-guide');
@@ -1294,7 +1289,7 @@ function applyMirror(){
   S.mirrorV=document.getElementById('tog-mv').checked;
   const mx=S.mirrorH?'scaleX(-1)':'';
   const my=S.mirrorV?'scaleY(-1)':'';
-  document.getElementById('prompter-view').style.transform=[mx,my].filter(Boolean).join(' ')||'none';
+  document.getElementById('prompter-scroll').style.transform=[mx,my].filter(Boolean).join(' ')||'none';
   saveSettings();
 }
 
@@ -1405,18 +1400,10 @@ function setupKeyboard(){
     const dy=tLastY-cy;
     tLastY=cy;
 
-    if(S.playing){
-      // Swipe up = faster, down = slower
-      S.speed=Math.max(20,Math.min(300,S.speed+dy*0.6));
-      document.getElementById('sl-sp').value=S.speed;
-      document.getElementById('v-sp').textContent=Math.round(S.speed);
-      refreshSpeedBadge();
-    } else {
-      // Manual scroll
-      S.scrollY=Math.max(0,Math.min(totalH,S.scrollY+dy));
-      applyScroll();
-      refreshProgress();
-    }
+    // Altijd slepen = positie aanpassen (ook tijdens afspelen)
+    S.scrollY=Math.max(0,Math.min(totalH,S.scrollY+dy*2.5));
+    applyScroll();
+    refreshProgress();
   },{passive:true});
 
   scr.addEventListener('touchend',e=>{
