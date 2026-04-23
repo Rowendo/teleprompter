@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Teleprompter">
+<meta name="theme-color" content="#000000">
+<title>TelePrompter Pro</title>
+<link rel="manifest" href="manifest.json">
+<style>
+/* ─── RESET & TOKENS ─────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --accent:#ff6b00;
+  --accent2:#ff9f45;
+  --bg:#000;
+  --panel:#111;
+  --panel2:#1a1a1a;
+  --border:#222;
+  --muted:#666;
+  --font-ui:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",sans-serif;
+  --radius:12px;
+  --tap:44px;
+}
+html,body{
+  height:100%;background:#000;color:#fff;
+  font-family:var(--font-ui);overflow:hidden;
+  -webkit-tap-highlight-color:transparent;
+  -webkit-touch-callout:none;
+  -webkit-user-select:none;user-select:none;
+}
+
+/* ─── VIEWS ───────────────────────────────────────────────────── */
+.view{position:fixed;inset:0;display:none;flex-direction:column}
+.view.active{display:flex}
+
+/* ─── SHARED BUTTON ───────────────────────────────────────────── */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-height:var(--tap);padding:0 18px;border:none;border-radius:var(--radius);
+  font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font-ui);
+  transition:opacity .15s,transform .1s;
+}
+.btn:active{opacity:.7;transform:scale(.97)}
+.btn-ghost{background:rgba(255,255,255,.09);color:#fff}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-danger{background:rgba(255,59,48,.18);color:#ff3b30}
+.btn-icon{padding:0;min-width:var(--tap);background:rgba(255,255,255,.09);color:#fff;font-size:20px}
+
+/* ─── EDITOR ──────────────────────────────────────────────────── */
+#editor-view{background:#0a0a0a}
+
+.editor-header{
+  display:flex;align-items:center;gap:10px;
+  padding:14px 18px;background:var(--panel);
+  border-bottom:1px solid var(--border);
+}
+.editor-header h1{font-size:20px;font-weight:800;letter-spacing:-.4px;flex:1}
+.editor-header h1 span{color:var(--accent)}
+.header-actions{display:flex;gap:8px}
+
+.editor-toolbar{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 18px;background:var(--panel);
+  border-bottom:1px solid #161616;flex-shrink:0;
+}
+#editor-stats{margin-left:auto;font-size:12px;color:var(--muted)}
+
+#script-input{
+  flex:1;background:#0a0a0a;color:#fff;border:none;outline:none;
+  padding:22px 20px;font-size:17px;line-height:1.65;resize:none;
+  font-family:-apple-system,sans-serif;
+  -webkit-user-select:text;user-select:text;
+}
+#script-input::placeholder{color:#2a2a2a}
+
+/* ─── PROMPTER VIEW ───────────────────────────────────────────── */
+#prompter-view{background:#000;overflow:hidden}
+
+#prompter-scroll{
+  position:absolute;inset:0;overflow:hidden;touch-action:none;
+}
+
+#prompter-text{
+  position:absolute;top:0;left:0;right:0;
+  padding:50vh 48px 50vh;
+  color:#fff;background:#000;
+  font-size:48px;line-height:1.5;
+  text-align:left;white-space:pre-wrap;word-break:break-word;
+  will-change:transform;
+}
+
+/* Reading guide */
+#reading-guide{
+  position:absolute;left:0;right:0;height:3px;
+  background:rgba(255,107,0,.65);pointer-events:none;z-index:10;
+  display:none;
+  box-shadow:0 0 12px rgba(255,107,0,.5);
+}
+
+/* Line highlight */
+#line-highlight{
+  position:absolute;left:0;right:0;
+  background:rgba(255,255,255,.055);pointer-events:none;z-index:9;display:none;
+}
+
+/* Progress bar */
+#progress-track{
+  position:absolute;bottom:0;left:0;right:0;height:3px;
+  background:rgba(255,255,255,.08);z-index:50;
+}
+#progress-bar{height:100%;background:var(--accent);width:0%;transition:width .12s linear}
+
+/* ─── TOP BAR ─────────────────────────────────────────────────── */
+#prompter-topbar{
+  position:absolute;top:0;left:0;right:0;z-index:100;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 18px;
+  background:linear-gradient(rgba(0,0,0,.75) 60%,transparent);
+  transition:opacity .3s,transform .3s;
+}
+#prompter-topbar.hidden{opacity:0;pointer-events:none;transform:translateY(-8px)}
+
+.topbar-info{font-size:13px;color:rgba(255,255,255,.45)}
+.topbar-right{display:flex;gap:8px}
+
+/* ─── CONTROLS OVERLAY ────────────────────────────────────────── */
+#controls-overlay{
+  position:absolute;bottom:0;left:0;right:0;z-index:100;
+  padding:10px 18px 30px;
+  background:linear-gradient(transparent,rgba(0,0,0,.88) 35%);
+  transition:opacity .3s,transform .3s;
+}
+#controls-overlay.hidden{opacity:0;pointer-events:none;transform:translateY(14px)}
+
+.ctrl-row{display:flex;align-items:center;gap:10px;justify-content:center}
+.ctrl-row+.ctrl-row{margin-top:8px}
+
+.meta-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 4px;margin-bottom:6px;
+}
+.meta-chip{
+  font-size:12px;color:rgba(255,255,255,.45);
+  background:rgba(255,255,255,.07);border-radius:20px;padding:3px 10px;
+}
+
+.ctrl-btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:52px;min-height:52px;border:none;border-radius:50%;
+  background:rgba(255,255,255,.1);color:#fff;font-size:22px;
+  cursor:pointer;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  font-family:var(--font-ui);transition:background .15s,transform .1s;
+}
+.ctrl-btn:active{background:rgba(255,255,255,.2);transform:scale(.93)}
+.ctrl-btn.big{min-width:66px;min-height:66px;font-size:28px;background:var(--accent)}
+.ctrl-btn.big:active{background:#e05e00}
+.ctrl-btn.lit{background:rgba(255,107,0,.25);border:1.5px solid rgba(255,107,0,.5)}
+
+.speed-badge{
+  font-size:13px;font-weight:700;color:rgba(255,255,255,.7);
+  min-width:48px;text-align:center;
+}
+
+/* ─── SETTINGS PANEL ──────────────────────────────────────────── */
+#settings-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.55);
+  z-index:200;display:none;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+}
+#settings-overlay.open{display:block}
+
+#settings-panel{
+  position:absolute;bottom:0;left:0;right:0;
+  max-height:88vh;background:var(--panel);
+  border-radius:22px 22px 0 0;overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+  transform:translateY(100%);
+  transition:transform .35s cubic-bezier(.32,.72,0,1);
+}
+#settings-overlay.open #settings-panel{transform:translateY(0)}
+#settings-panel::-webkit-scrollbar{display:none}
+
+.drag-handle{width:38px;height:4px;background:#2e2e2e;border-radius:2px;margin:12px auto 0}
+
+.panel-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 20px;border-bottom:1px solid #1c1c1c;
+}
+.panel-header h2{font-size:17px;font-weight:700}
+
+.panel-section{padding:20px;border-bottom:1px solid #161616}
+.panel-section h3{
+  font-size:11px;font-weight:700;letter-spacing:.9px;
+  text-transform:uppercase;color:var(--muted);margin-bottom:14px;
+}
+
+.s-row{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.s-row:last-child{margin-bottom:0}
+.s-label{font-size:15px;color:#fff;flex:1}
+.s-label small{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+
+/* Range */
+.range-wrap{display:flex;align-items:center;gap:8px;flex:1;max-width:260px}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;flex:1;height:4px;
+  background:#2c2c2c;border-radius:2px;outline:none;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:26px;height:26px;background:#fff;
+  border-radius:50%;box-shadow:0 1px 6px rgba(0,0,0,.55);cursor:pointer;
+}
+.rval{font-size:13px;font-weight:700;color:#fff;min-width:44px;text-align:right}
+
+.step-btn{
+  min-width:36px;min-height:36px;padding:0;font-size:18px;
+  background:rgba(255,255,255,.08);border:none;border-radius:8px;
+  color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-ui);
+}
+.step-btn:active{opacity:.6}
+
+/* Toggle */
+.tog{position:relative;width:51px;height:31px;flex-shrink:0}
+.tog input{opacity:0;width:0;height:0;position:absolute}
+.tog-track{
+  position:absolute;inset:0;background:#2c2c2c;border-radius:31px;
+  cursor:pointer;transition:background .2s;
+}
+.tog input:checked+.tog-track{background:var(--accent)}
+.tog-thumb{
+  position:absolute;top:2px;left:2px;width:27px;height:27px;
+  background:#fff;border-radius:50%;pointer-events:none;
+  box-shadow:0 1px 4px rgba(0,0,0,.45);transition:transform .2s;
+}
+.tog input:checked~.tog-thumb{transform:translateX(20px)}
+
+/* Pill group */
+.pill-group{display:flex;gap:6px}
+.pill{
+  flex:1;min-height:var(--tap);background:var(--panel2);
+  border:2px solid #2a2a2a;border-radius:10px;color:#fff;
+  font-size:14px;font-weight:600;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-ui);transition:border-color .15s,background .15s;
+}
+.pill.on{border-color:var(--accent);background:rgba(255,107,0,.12)}
+
+/* Color presets */
+.color-presets{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px}
+.cp-btn{
+  height:var(--tap);border-radius:9px;border:2.5px solid transparent;
+  cursor:pointer;font-size:11px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  transition:border-color .15s;
+}
+.cp-btn.on{border-color:var(--accent)}
+
+.color-row{display:flex;gap:14px}
+.cp-group{display:flex;align-items:center;gap:8px;flex:1}
+.cp-group label{font-size:13px;color:var(--muted)}
+input[type=color]{
+  width:38px;height:38px;border:none;border-radius:9px;
+  cursor:pointer;padding:0;background:none;
+}
+
+/* Font pills */
+.font-pill{
+  flex:1;min-height:var(--tap);background:var(--panel2);
+  border:2px solid #2a2a2a;border-radius:10px;color:#fff;
+  font-size:16px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:border-color .15s,background .15s;
+}
+.font-pill.on{border-color:var(--accent);background:rgba(255,107,0,.12)}
+
+/* Timed-mode minutes input */
+.num-input{
+  width:62px;min-height:var(--tap);background:var(--panel2);
+  border:1px solid #2a2a2a;border-radius:9px;color:#fff;
+  font-size:16px;text-align:center;outline:none;
+  -webkit-appearance:none;font-family:var(--font-ui);
+}
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none}
+
+/* ─── COUNTDOWN ───────────────────────────────────────────────── */
+#countdown-overlay{
+  position:fixed;inset:0;background:#000;z-index:500;
+  display:none;align-items:center;justify-content:center;flex-direction:column;
+}
+#countdown-overlay.active{display:flex}
+#countdown-num{
+  font-size:180px;font-weight:900;color:var(--accent);line-height:1;
+  animation:cdpulse 1s ease-out;
+}
+@keyframes cdpulse{from{transform:scale(1.4);opacity:.5}to{transform:scale(1);opacity:1}}
+#countdown-label{font-size:19px;color:var(--muted);margin-top:14px}
+
+/* ─── CUE FLASH ───────────────────────────────────────────────── */
+#cue-flash{
+  position:fixed;inset:0;border:10px solid var(--accent);
+  z-index:400;pointer-events:none;opacity:0;
+}
+#cue-flash.flash{animation:cueflash .9s ease-out forwards}
+@keyframes cueflash{0%{opacity:1}60%{opacity:.7}100%{opacity:0}}
+
+/* ─── LOCK SCREEN ─────────────────────────────────────────────── */
+#lock-overlay{position:fixed;inset:0;z-index:300;display:none}
+#lock-overlay.active{display:block}
+#lock-pill{
+  position:absolute;top:20px;right:20px;
+  background:rgba(0,0,0,.75);border-radius:24px;
+  padding:9px 16px;font-size:13px;color:rgba(255,255,255,.45);
+  display:flex;align-items:center;gap:6px;backdrop-filter:blur(8px);
+}
+
+/* ─── ONBOARDING ──────────────────────────────────────────────── */
+#onboarding{
+  position:fixed;inset:0;background:#000;z-index:600;
+  display:none;flex-direction:column;
+  align-items:center;justify-content:center;padding:40px 32px;
+}
+#onboarding.active{display:flex}
+.ob-icon{font-size:64px;margin-bottom:22px}
+.ob-title{font-size:30px;font-weight:900;margin-bottom:8px;text-align:center}
+.ob-sub{font-size:17px;color:var(--muted);margin-bottom:44px;text-align:center}
+.ob-steps{display:flex;flex-direction:column;gap:18px;width:100%;max-width:380px;margin-bottom:40px}
+.ob-step{display:flex;align-items:center;gap:16px}
+.ob-num{
+  width:36px;height:36px;flex-shrink:0;
+  background:var(--accent);border-radius:50%;
+  font-size:16px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;
+}
+.ob-text{font-size:16px;color:#ccc}
+
+/* ─── RESPONSIVE TWEAKS ───────────────────────────────────────── */
+@media(orientation:landscape){
+  #controls-overlay{padding-bottom:18px}
+  #onboarding{flex-direction:row;gap:48px;align-items:center}
+  .ob-right{flex:1}
+  .ob-icon,.ob-title,.ob-sub{text-align:left}
+}
+@media(max-width:480px){
+  .color-presets{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<!-- ── ONBOARDING ─────────────────────────────────────────────── -->
+<div id="onboarding">
+  <div class="ob-icon">🎬</div>
+  <div class="ob-right">
+    <h1 class="ob-title">TelePrompter Pro</h1>
+    <p class="ob-sub">Professioneel · Offline · Geen afleiding</p>
+    <div class="ob-steps">
+      <div class="ob-step">
+        <div class="ob-num">1</div>
+        <span class="ob-text">Plak of typ je script in het tekstveld</span>
+      </div>
+      <div class="ob-step">
+        <div class="ob-num">2</div>
+        <span class="ob-text">Stel lettergrootte en snelheid in via ⚙️</span>
+      </div>
+      <div class="ob-step">
+        <div class="ob-num">3</div>
+        <span class="ob-text">Druk Start → camera aan → begin je opname</span>
+      </div>
+    </div>
+    <button class="btn btn-primary" style="font-size:17px;padding:0 44px;min-height:52px" onclick="dismissOnboarding()">Aan de slag →</button>
+  </div>
+</div>
+
+<!-- ── EDITOR VIEW ────────────────────────────────────────────── -->
+<div id="editor-view" class="view">
+  <div class="editor-header">
+    <h1>Tele<span>Prompter</span></h1>
+    <div class="header-actions">
+      <button class="btn btn-icon" onclick="importFile()" title="Bestand importeren">📂</button>
+      <button class="btn btn-danger" onclick="clearScript()">Wis</button>
+      <button class="btn btn-primary" onclick="startPrompter()">Start ▶</button>
+    </div>
+  </div>
+  <div class="editor-toolbar">
+    <span id="editor-stats" style="font-size:12px;color:var(--muted)">0 woorden · 0 tekens</span>
+  </div>
+  <textarea id="script-input"
+    placeholder="Plak hier je script…&#10;&#10;Of druk op 📂 om een .txt bestand te importeren."></textarea>
+  <input type="file" id="file-input" accept=".txt,.md,.rtf" style="display:none" onchange="handleFileImport(event)">
+</div>
+
+<!-- ── PROMPTER VIEW ──────────────────────────────────────────── -->
+<div id="prompter-view" class="view">
+  <div id="reading-guide"></div>
+  <div id="line-highlight"></div>
+
+  <div id="prompter-scroll">
+    <div id="prompter-text"></div>
+  </div>
+
+  <div id="progress-track"><div id="progress-bar"></div></div>
+
+  <!-- Top bar -->
+  <div id="prompter-topbar">
+    <button class="ctrl-btn" onclick="exitPrompter()" style="font-size:15px">✕</button>
+    <span class="topbar-info" id="word-count-display"></span>
+    <div class="topbar-right">
+      <button class="ctrl-btn" id="lock-btn" onclick="toggleLock()" style="font-size:17px">🔓</button>
+      <button class="ctrl-btn" id="settings-btn" onclick="openSettings()" style="font-size:18px">⚙️</button>
+    </div>
+  </div>
+
+  <!-- Controls overlay -->
+  <div id="controls-overlay">
+    <div class="meta-row">
+      <span class="meta-chip" id="time-remaining">--:--</span>
+      <span class="meta-chip" id="progress-label">0%</span>
+    </div>
+    <div class="ctrl-row">
+      <button class="ctrl-btn" onclick="adjustSpeed(-1)" title="Langzamer">−</button>
+      <span class="speed-badge" id="speed-badge">1.0×</span>
+      <button class="ctrl-btn" onclick="adjustSpeed(1)" title="Sneller">+</button>
+      <div style="width:8px"></div>
+      <button class="ctrl-btn" onclick="restartPrompter()" title="Herstart" style="font-size:20px">⟳</button>
+      <button class="ctrl-btn big" id="play-btn" onclick="togglePlayPause()">▶</button>
+      <button class="ctrl-btn" id="hide-btn" onclick="toggleControls()" title="Verberg" style="font-size:18px">👁</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── SETTINGS PANEL ─────────────────────────────────────────── -->
+<div id="settings-overlay" onclick="maybeCloseSettings(event)">
+  <div id="settings-panel">
+    <div class="drag-handle"></div>
+    <div class="panel-header">
+      <h2>Instellingen</h2>
+      <button class="btn btn-ghost" style="min-height:36px;padding:0 14px;font-size:14px" onclick="closeSettings()">Klaar</button>
+    </div>
+
+    <!-- TEKST -->
+    <div class="panel-section">
+      <h3>Tekst</h3>
+
+      <div class="s-row">
+        <span class="s-label">Lettergrootte</span>
+        <div class="range-wrap">
+          <button class="step-btn" onclick="stepFontSize(-4)">−</button>
+          <input type="range" id="sl-fs" min="16" max="120" value="48" oninput="onFontSize(this.value)">
+          <button class="step-btn" onclick="stepFontSize(4)">+</button>
+          <span class="rval" id="v-fs">48</span>
+        </div>
+      </div>
+
+      <div class="s-row">
+        <span class="s-label">Lettertype</span>
+        <div class="pill-group">
+          <button class="font-pill on" data-font="sans" onclick="setFont('sans',this)" style="font-family:sans-serif">Aa</button>
+          <button class="font-pill" data-font="serif" onclick="setFont('serif',this)" style="font-family:Georgia,serif">Aa</button>
+          <button class="font-pill" data-font="mono" onclick="setFont('mono',this)" style="font-family:monospace;font-size:13px">Aa</button>
+        </div>
+      </div>
+
+      <div class="s-row">
+        <span class="s-label">Regelafstand</span>
+        <div class="range-wrap">
+          <input type="range" id="sl-lh" min="120" max="260" value="150" oninput="onLineHeight(this.value)">
+          <span class="rval" id="v-lh">1.5</span>
+        </div>
+      </div>
+
+      <div class="s-row">
+        <span class="s-label">Woordafstand</span>
+        <div class="range-wrap">
+          <input type="range" id="sl-ws" min="-2" max="20" value="0" oninput="onWordSpacing(this.value)">
+          <span class="rval" id="v-ws">0px</span>
+        </div>
+      </div>
+
+      <div class="s-row">
+        <span class="s-label">Letterafstand</span>
+        <div class="range-wrap">
+          <input type="range" id="sl-ls" min="-2" max="12" value="0" oninput="onLetterSpacing(this.value)">
+          <span class="rval" id="v-ls">0px</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- WEERGAVE -->
+    <div class="panel-section">
+      <h3>Weergave</h3>
+
+      <div class="color-presets">
+        <button class="cp-btn on" data-p="wb" onclick="applyPreset('wb',this)"
+          style="background:#000;color:#fff">Wit/Zwart</button>
+        <button class="cp-btn" data-p="bw" onclick="applyPreset('bw',this)"
+          style="background:#fff;color:#000">Zwart/Wit</button>
+        <button class="cp-btn" data-p="yb" onclick="applyPreset('yb',this)"
+          style="background:#000;color:#ff0">Geel/Zwart</button>
+        <button class="cp-btn" data-p="gb" onclick="applyPreset('gb',this)"
+          style="background:#000;color:#0f0">Groen/Zwart</button>
+      </div>
+
+      <div class="color-row">
+        <div class="cp-group">
+          <label>Tekst</label>
+          <input type="color" id="clr-text" value="#ffffff" oninput="onTextColor(this.value)">
+        </div>
+        <div class="cp-group">
+          <label>Achtergrond</label>
+          <input type="color" id="clr-bg" value="#000000" oninput="onBgColor(this.value)">
+        </div>
+      </div>
+
+      <div class="s-row" style="margin-top:16px">
+        <span class="s-label">Marge links/rechts</span>
+        <div class="range-wrap">
+          <input type="range" id="sl-mg" min="0" max="180" value="48" oninput="onMargin(this.value)">
+          <span class="rval" id="v-mg">48px</span>
+        </div>
+      </div>
+
+      <div class="s-row">
+        <span class="s-label">Uitlijning</span>
+        <div class="pill-group">
+          <button class="pill on" data-a="left" onclick="setAlign('left',this)">Links</button>
+          <button class="pill" data-a="center" onclick="setAlign('center',this)">Midden</button>
+        </div>
+      </div>
+
+      <div class="s-row">
+        <span class="s-label">Tekst in middenbaan
+          <small>Beperkt tekst tot 60% van het scherm</small>
+        </span>
+        <label class="tog">
+          <input type="checkbox" id="tog-cz" onchange="onCenterZone(this.checked)">
+          <div class="tog-track"></div><div class="tog-thumb"></div>
+        </label>
+      </div>
+    </div>
+
+    <!-- SCROLL -->
+    <div class="panel-section">
+      <h3>Scrollen</h3>
+
+      <div class="s-row">
+        <span class="s-label">Scrollsnelheid (px/sec)</span>
+        <div class="range-wrap">
+          <button class="step-btn" onclick="adjustSpeed(-1)">−</button>
+          <input type="range" id="sl-sp" min="20" max="300" value="80" oninput="onSpeed(this.value)">
+          <button class="step-btn" onclick="adjustSpeed(1)">+</button>
+          <span class="rval" id="v-sp">80</span>
+        </div>
+      </div>
+
+      <div class="s-row">
+        <span class="s-label">Tijdmodus
+          <small>Snelheid berekend op basis van leestijd</small>
+        </span>
+        <label class="tog">
+          <input type="checkbox" id="tog-tm" onchange="onTimedMode(this.checked)">
+          <div class="tog-track"></div><div class="tog-thumb"></div>
+        </label>
+      </div>
+
+      <div class="s-row" id="row-tm" style="display:none">
+        <span class="s-label">Leestijd</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="number" class="num-input" id="inp-tm" min="1" max="99" value="5" oninput="recalcTimedSpeed()">
+          <span style="font-size:14px;color:var(--muted)">min</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- SPIEGEL -->
+    <div class="panel-section">
+      <h3>Spiegel</h3>
+
+      <div class="s-row">
+        <span class="s-label">Horizontaal spiegelen
+          <small>Voor teleprompter spiegelglas</small>
+        </span>
+        <label class="tog">
+          <input type="checkbox" id="tog-mh" onchange="applyMirror()">
+          <div class="tog-track"></div><div class="tog-thumb"></div>
+        </label>
+      </div>
+
+      <div class="s-row">
+        <span class="s-label">Verticaal spiegelen
+          <small>Voor plafondmontage</small>
+        </span>
+        <label class="tog">
+          <input type="checkbox" id="tog-mv" onchange="applyMirror()">
+          <div class="tog-track"></div><div class="tog-thumb"></div>
+        </label>
+      </div>
+    </div>
+
+    <!-- PRODUCTIE -->
+    <div class="panel-section">
+      <h3>Productie</h3>
+
+      <div class="s-row">
+        <span class="s-label">Aftellen voor start</span>
+        <div class="pill-group">
+          <button class="pill on" data-cd="0" onclick="setCountdown(0,this)">Geen</button>
+          <button class="pill" data-cd="3" onclick="setCountdown(3,this)">3s</button>
+          <button class="pill" data-cd="5" onclick="setCountdown(5,this)">5s</button>
+        </div>
+      </div>
+
+      <div class="s-row">
+        <span class="s-label">Cue-flash bij start</span>
+        <label class="tog">
+          <input type="checkbox" id="tog-cf" checked>
+          <div class="tog-track"></div><div class="tog-thumb"></div>
+        </label>
+      </div>
+
+      <div class="s-row">
+        <span class="s-label">Leeslijn tonen
+          <small>Oranje markering op leeshoogte</small>
+        </span>
+        <label class="tog">
+          <input type="checkbox" id="tog-rg" onchange="onReadingGuide(this.checked)">
+          <div class="tog-track"></div><div class="tog-thumb"></div>
+        </label>
+      </div>
+
+      <div class="s-row" id="row-rgp" style="display:none">
+        <span class="s-label">Positie leeslijn</span>
+        <div class="range-wrap">
+          <input type="range" id="sl-rgp" min="15" max="85" value="40" oninput="onReadingGuidePos(this.value)">
+          <span class="rval" id="v-rgp">40%</span>
+        </div>
+      </div>
+
+      <div class="s-row">
+        <span class="s-label">Huidige regel markeren</span>
+        <label class="tog">
+          <input type="checkbox" id="tog-lh" onchange="onLineHighlight(this.checked)">
+          <div class="tog-track"></div><div class="tog-thumb"></div>
+        </label>
+      </div>
+
+      <div class="s-row">
+        <span class="s-label">Scherm aan houden
+          <small>Verhindert dimmen tijdens opname</small>
+        </span>
+        <label class="tog">
+          <input type="checkbox" id="tog-wl" checked onchange="onWakeLock(this.checked)">
+          <div class="tog-track"></div><div class="tog-thumb"></div>
+        </label>
+      </div>
+    </div>
+
+    <!-- SNELTOETSEN -->
+    <div class="panel-section">
+      <h3>Sneltoetsen & Gebaren</h3>
+      <div style="font-size:13px;color:#555;line-height:2">
+        <div>⎵ <span style="color:#888">Spatiebalk</span> — Spelen / pauzeren</div>
+        <div>↑ ↓ <span style="color:#888">Pijltoetsen</span> — Snelheid aanpassen</div>
+        <div>R — Herstart &nbsp;·&nbsp; H — Verberg bediening</div>
+        <div>Twee vingers tikken — Spelen / pauzeren</div>
+        <div>Vegen omhoog/omlaag tijdens afspelen — Snelheid</div>
+        <div>Tikken buiten bediening — Toon bediening</div>
+      </div>
+    </div>
+
+    <div style="height:44px"></div>
+  </div>
+</div>
+
+<!-- ── COUNTDOWN ──────────────────────────────────────────────── -->
+<div id="countdown-overlay">
+  <div id="countdown-num">3</div>
+  <div id="countdown-label">Klaar voor opname…</div>
+</div>
+
+<!-- ── CUE FLASH ─────────────────────────────────────────────── -->
+<div id="cue-flash"></div>
+
+<!-- ── LOCK OVERLAY ───────────────────────────────────────────── -->
+<div id="lock-overlay">
+  <div id="lock-pill">🔒 Geblokkeerd · Houd 2s ingedrukt om te ontgrendelen</div>
+</div>
+
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+const S = {
+  script:'',
+  playing:false,
+  scrollY:0,
+  speed:80,         // px / sec
+  fontSize:48,
+  font:'sans',
+  lineHeight:1.5,
+  wordSpacing:0,
+  letterSpacing:0,
+  textColor:'#ffffff',
+  bgColor:'#000000',
+  marginX:48,
+  align:'left',
+  centerZone:false,
+  mirrorH:false,
+  mirrorV:false,
+  countdown:0,
+  cueFlash:true,
+  readingGuide:false,
+  readingGuidePos:40,
+  lineHighlight:false,
+  wakeLock:true,
+  timedMode:false,
+  timedMin:5,
+  controlsVis:true,
+  locked:false,
+};
+
+const FONTS = {
+  sans:'-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",Arial,sans-serif',
+  serif:'Georgia,"Times New Roman",Times,serif',
+  mono:'"SF Mono","Fira Code","Roboto Mono",Courier,monospace',
+};
+
+const PRESETS = {
+  wb:{text:'#ffffff',bg:'#000000'},
+  bw:{text:'#000000',bg:'#ffffff'},
+  yb:{text:'#ffff00',bg:'#000000'},
+  gb:{text:'#00ff00',bg:'#000000'},
+};
+
+let rafId=null, lastTs=null, totalH=0, wakeSentinel=null;
+let lockTimer=null;
+let tStart=0, tY=0, tLastY=0, tCount=0, touchScrolling=false;
+let hideTimer=null;
+
+// ═══════════════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════════════
+function boot(){
+  loadSettings();
+  loadScript();
+  syncUI();
+
+  if(!localStorage.getItem('tp_welcomed')){
+    document.getElementById('onboarding').classList.add('active');
+  } else {
+    showView('editor');
+  }
+
+  setupKeyboard();
+  setupSwipePanel();
+
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+  }
+}
+
+function dismissOnboarding(){
+  localStorage.setItem('tp_welcomed','1');
+  document.getElementById('onboarding').classList.remove('active');
+  showView('editor');
+}
+
+function showView(name){
+  document.getElementById('editor-view').classList.toggle('active', name==='editor');
+  document.getElementById('prompter-view').classList.toggle('active', name==='prompter');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PERSISTENCE
+// ═══════════════════════════════════════════════════════════════
+function saveSettings(){
+  const snap={...S};
+  ['script','playing','scrollY','controlsVis','locked'].forEach(k=>delete snap[k]);
+  localStorage.setItem('tp_s',JSON.stringify(snap));
+}
+function loadSettings(){
+  try{const d=localStorage.getItem('tp_s');if(d)Object.assign(S,JSON.parse(d));}catch(e){}
+}
+function saveScript(){localStorage.setItem('tp_script',S.script)}
+function loadScript(){
+  const v=localStorage.getItem('tp_script')||'';
+  S.script=v;
+  document.getElementById('script-input').value=v;
+  refreshEditorStats();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EDITOR
+// ═══════════════════════════════════════════════════════════════
+document.getElementById('script-input').addEventListener('input',function(){
+  S.script=this.value;
+  saveScript();
+  refreshEditorStats();
+});
+
+function refreshEditorStats(){
+  const t=S.script.trim();
+  const w=t?t.split(/\s+/).length:0;
+  document.getElementById('editor-stats').textContent=`${w} woorden · ${S.script.length} tekens`;
+}
+
+function importFile(){document.getElementById('file-input').click()}
+function handleFileImport(ev){
+  const f=ev.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=e=>{
+    S.script=e.target.result;
+    document.getElementById('script-input').value=S.script;
+    saveScript();refreshEditorStats();
+  };
+  r.readAsText(f);
+  ev.target.value='';
+}
+function clearScript(){
+  if(!S.script||!confirm('Script wissen?'))return;
+  S.script='';
+  document.getElementById('script-input').value='';
+  saveScript();refreshEditorStats();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// START PROMPTER
+// ═══════════════════════════════════════════════════════════════
+function startPrompter(){
+  if(!S.script.trim()){alert('Voeg eerst een script toe.');return;}
+
+  const el=document.getElementById('prompter-text');
+  el.textContent=S.script;
+
+  S.scrollY=0;
+  S.playing=false;
+  S.controlsVis=true;
+
+  applyStyles();
+  showView('prompter');
+  refreshPrompterMeta();
+
+  // Compute scroll metrics after layout
+  requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>{
+      computeMetrics();
+      if(S.timedMode) recalcTimedSpeed();
+      refreshProgress();
+
+      if(S.countdown>0){
+        runCountdown(S.countdown, ()=>{flash();beginScroll();});
+      }
+      // if no countdown, user taps play
+    });
+  });
+
+  if(S.wakeLock) requestWL();
+}
+
+function computeMetrics(){
+  const txt=document.getElementById('prompter-text');
+  const scr=document.getElementById('prompter-scroll');
+  totalH=Math.max(0, txt.offsetHeight - scr.clientHeight);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCROLL ENGINE
+// ═══════════════════════════════════════════════════════════════
+function beginScroll(){
+  if(S.playing) return;
+  S.playing=true;
+  document.getElementById('play-btn').textContent='⏸';
+  lastTs=null;
+  rafId=requestAnimationFrame(tick);
+}
+
+function pauseScroll(){
+  S.playing=false;
+  document.getElementById('play-btn').textContent='▶';
+  if(rafId){cancelAnimationFrame(rafId);rafId=null;}
+}
+
+function tick(ts){
+  if(!lastTs) lastTs=ts;
+  const dt=(ts-lastTs)/1000;
+  lastTs=ts;
+
+  S.scrollY=Math.min(totalH, S.scrollY+S.speed*dt);
+  applyScroll();
+  refreshProgress();
+
+  if(S.scrollY>=totalH){
+    pauseScroll();
+    return;
+  }
+  rafId=requestAnimationFrame(tick);
+}
+
+function applyScroll(){
+  document.getElementById('prompter-text').style.transform=`translateY(${-S.scrollY}px)`;
+  if(S.lineHighlight) updateHighlightPos();
+}
+
+function togglePlayPause(){
+  if(S.playing){
+    pauseScroll();
+  } else {
+    if(S.cueFlash && S.scrollY===0) flash();
+    beginScroll();
+  }
+}
+
+function restartPrompter(){
+  pauseScroll();
+  S.scrollY=0;
+  applyScroll();
+  refreshProgress();
+}
+
+function exitPrompter(){
+  pauseScroll();
+  releaseWL();
+  S.locked=false;
+  document.getElementById('lock-overlay').classList.remove('active');
+  showView('editor');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SPEED
+// ═══════════════════════════════════════════════════════════════
+function onSpeed(v){
+  S.speed=parseFloat(v);
+  document.getElementById('sl-sp').value=v;
+  document.getElementById('v-sp').textContent=Math.round(S.speed);
+  refreshSpeedBadge();
+  refreshTimeRemaining();
+  saveSettings();
+}
+
+function adjustSpeed(dir){
+  // dir: +1 faster, -1 slower, step = 10 px/s
+  const step=dir*10;
+  onSpeed(Math.max(20,Math.min(300,S.speed+step)));
+}
+
+function refreshSpeedBadge(){
+  const m=(S.speed/80).toFixed(1);
+  document.getElementById('speed-badge').textContent=`${m}×`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PROGRESS & TIME
+// ═══════════════════════════════════════════════════════════════
+function refreshProgress(){
+  if(totalH<=0) return;
+  const pct=Math.min(100,(S.scrollY/totalH)*100);
+  document.getElementById('progress-bar').style.width=pct+'%';
+  document.getElementById('progress-label').textContent=Math.round(pct)+'%';
+  refreshTimeRemaining();
+}
+
+function refreshTimeRemaining(){
+  if(!S.speed||totalH<=0){
+    document.getElementById('time-remaining').textContent='--:--';
+    return;
+  }
+  const rem=Math.max(0,totalH-S.scrollY)/S.speed;
+  const m=Math.floor(rem/60), s=Math.floor(rem%60);
+  document.getElementById('time-remaining').textContent=
+    `${m}:${String(s).padStart(2,'0')} over`;
+}
+
+function refreshPrompterMeta(){
+  const w=S.script.trim()?S.script.trim().split(/\s+/).length:0;
+  document.getElementById('word-count-display').textContent=`${w} woorden`;
+  refreshSpeedBadge();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// COUNTDOWN + FLASH
+// ═══════════════════════════════════════════════════════════════
+function runCountdown(sec, cb){
+  const ov=document.getElementById('countdown-overlay');
+  const num=document.getElementById('countdown-num');
+  let n=sec;
+  num.textContent=n;
+  ov.classList.add('active');
+
+  const t=setInterval(()=>{
+    n--;
+    if(n<=0){
+      clearInterval(t);
+      ov.classList.remove('active');
+      cb();
+    } else {
+      num.style.animation='none';
+      num.offsetHeight; // force reflow
+      num.style.animation='cdpulse 1s ease-out';
+      num.textContent=n;
+    }
+  },1000);
+}
+
+function flash(){
+  if(!S.cueFlash) return;
+  const el=document.getElementById('cue-flash');
+  el.classList.remove('flash');
+  el.offsetHeight;
+  el.classList.add('flash');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONTROLS VISIBILITY
+// ═══════════════════════════════════════════════════════════════
+function toggleControls(){
+  S.controlsVis=!S.controlsVis;
+  applyControlsVis();
+}
+
+function applyControlsVis(){
+  document.getElementById('controls-overlay').classList.toggle('hidden',!S.controlsVis);
+  document.getElementById('prompter-topbar').classList.toggle('hidden',!S.controlsVis);
+}
+
+function peekControls(){
+  if(S.controlsVis) return;
+  document.getElementById('controls-overlay').classList.remove('hidden');
+  document.getElementById('prompter-topbar').classList.remove('hidden');
+  clearTimeout(hideTimer);
+  hideTimer=setTimeout(()=>{
+    if(!S.controlsVis){
+      document.getElementById('controls-overlay').classList.add('hidden');
+      document.getElementById('prompter-topbar').classList.add('hidden');
+    }
+  },3000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LOCK
+// ═══════════════════════════════════════════════════════════════
+function toggleLock(){
+  S.locked=!S.locked;
+  document.getElementById('lock-overlay').classList.toggle('active',S.locked);
+  document.getElementById('lock-btn').textContent=S.locked?'🔒':'🔓';
+}
+
+// Long-press to unlock
+(()=>{
+  const ov=document.getElementById('lock-overlay');
+  ov.addEventListener('touchstart',()=>{
+    lockTimer=setTimeout(()=>{
+      S.locked=false;
+      ov.classList.remove('active');
+      document.getElementById('lock-btn').textContent='🔓';
+    },2000);
+  },{passive:true});
+  ov.addEventListener('touchend',()=>clearTimeout(lockTimer),{passive:true});
+  ov.addEventListener('touchcancel',()=>clearTimeout(lockTimer),{passive:true});
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// SETTINGS PANEL
+// ═══════════════════════════════════════════════════════════════
+function openSettings(){
+  pauseScroll();
+  syncUI();
+  document.getElementById('settings-overlay').classList.add('open');
+}
+function closeSettings(){
+  document.getElementById('settings-overlay').classList.remove('open');
+  applyStyles();
+  saveSettings();
+}
+function maybeCloseSettings(e){
+  if(e.target===document.getElementById('settings-overlay')) closeSettings();
+}
+
+// Swipe-down on panel drag handle to close
+function setupSwipePanel(){
+  const panel=document.getElementById('settings-panel');
+  let sy=0, scrolled=false;
+  panel.addEventListener('touchstart',e=>{sy=e.touches[0].clientY;scrolled=false;},{passive:true});
+  panel.addEventListener('touchmove',e=>{
+    if(panel.scrollTop>0){scrolled=true;}
+  },{passive:true});
+  panel.addEventListener('touchend',e=>{
+    if(!scrolled && e.changedTouches[0].clientY-sy>60) closeSettings();
+  },{passive:true});
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SYNC UI ↔ STATE (call after loading settings)
+// ═══════════════════════════════════════════════════════════════
+function syncUI(){
+  set('sl-fs',S.fontSize); set('v-fs',S.fontSize);
+  set('sl-lh',S.lineHeight*100); set('v-lh',S.lineHeight.toFixed(1));
+  set('sl-ws',S.wordSpacing); set('v-ws',S.wordSpacing+'px');
+  set('sl-ls',S.letterSpacing); set('v-ls',S.letterSpacing+'px');
+  set('sl-mg',S.marginX); set('v-mg',S.marginX+'px');
+  set('sl-sp',S.speed); set('v-sp',Math.round(S.speed));
+  set('clr-text',S.textColor); set('clr-bg',S.bgColor);
+  set('tog-mh',S.mirrorH,'chk'); set('tog-mv',S.mirrorV,'chk');
+  set('tog-rg',S.readingGuide,'chk');
+  set('tog-lh',S.lineHighlight,'chk');
+  set('tog-wl',S.wakeLock,'chk');
+  set('tog-tm',S.timedMode,'chk');
+  set('tog-cf',S.cueFlash,'chk');
+  set('tog-cz',S.centerZone,'chk');
+  set('inp-tm',S.timedMin);
+  set('sl-rgp',S.readingGuidePos); set('v-rgp',S.readingGuidePos+'%');
+
+  document.getElementById('row-tm').style.display=S.timedMode?'flex':'none';
+  document.getElementById('row-rgp').style.display=S.readingGuide?'flex':'none';
+
+  // Font pills
+  document.querySelectorAll('.font-pill').forEach(b=>b.classList.toggle('on',b.dataset.font===S.font));
+  // Align pills
+  document.querySelectorAll('[data-a]').forEach(b=>b.classList.toggle('on',b.dataset.a===S.align));
+  // Countdown pills
+  document.querySelectorAll('[data-cd]').forEach(b=>b.classList.toggle('on',+b.dataset.cd===S.countdown));
+  // Color presets — mark all off (user may have custom colors)
+  document.querySelectorAll('[data-p]').forEach(b=>{
+    const p=PRESETS[b.dataset.p];
+    b.classList.toggle('on',p.text===S.textColor&&p.bg===S.bgColor);
+  });
+
+  refreshSpeedBadge();
+}
+
+function set(id,val,mode='val'){
+  const el=document.getElementById(id);
+  if(!el) return;
+  if(mode==='chk') el.checked=val;
+  else if(mode==='val') el.value=val;
+  else el.textContent=val;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// APPLY STYLES TO PROMPTER
+// ═══════════════════════════════════════════════════════════════
+function applyStyles(){
+  const txt=document.getElementById('prompter-text');
+  const scr=document.getElementById('prompter-scroll');
+  const pv=document.getElementById('prompter-view');
+
+  txt.style.color=S.textColor;
+  txt.style.background=S.bgColor;
+  scr.style.background=S.bgColor;
+  pv.style.background=S.bgColor;
+
+  txt.style.fontSize=S.fontSize+'px';
+  txt.style.fontFamily=FONTS[S.font];
+  txt.style.lineHeight=S.lineHeight;
+  txt.style.wordSpacing=S.wordSpacing+'px';
+  txt.style.letterSpacing=S.letterSpacing+'px';
+  txt.style.textAlign=S.align;
+
+  // Margins / center zone
+  if(S.centerZone){
+    const zw=Math.max(280,window.innerWidth*.62);
+    const zp=(window.innerWidth-zw)/2;
+    txt.style.paddingLeft=zp+'px';
+    txt.style.paddingRight=zp+'px';
+  } else {
+    txt.style.paddingLeft=S.marginX+'px';
+    txt.style.paddingRight=S.marginX+'px';
+  }
+
+  // Mirror
+  const mx=S.mirrorH?'scaleX(-1)':'';
+  const my=S.mirrorV?'scaleY(-1)':'';
+  pv.style.transform=[mx,my].filter(Boolean).join(' ')||'none';
+
+  // Reading guide
+  const rg=document.getElementById('reading-guide');
+  rg.style.display=S.readingGuide?'block':'none';
+  rg.style.top=S.readingGuidePos+'vh';
+
+  // Line highlight
+  const lh=document.getElementById('line-highlight');
+  lh.style.display=S.lineHighlight?'block':'none';
+  lh.style.top=S.readingGuidePos+'vh';
+  lh.style.height=(S.fontSize*S.lineHeight)+'px';
+}
+
+function updateHighlightPos(){
+  const el=document.getElementById('line-highlight');
+  el.style.height=(S.fontSize*S.lineHeight)+'px';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INDIVIDUAL SETTING HANDLERS
+// ═══════════════════════════════════════════════════════════════
+
+// Font size
+function onFontSize(v){
+  S.fontSize=parseInt(v);
+  document.getElementById('v-fs').textContent=v;
+  document.getElementById('prompter-text').style.fontSize=v+'px';
+  computeMetrics();saveSettings();
+}
+function stepFontSize(d){onFontSize(Math.max(16,Math.min(120,S.fontSize+d)));}
+
+// Font family
+function setFont(f,btn){
+  S.font=f;
+  document.querySelectorAll('.font-pill').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('prompter-text').style.fontFamily=FONTS[f];
+  computeMetrics();saveSettings();
+}
+
+// Line height
+function onLineHeight(v){
+  S.lineHeight=v/100;
+  document.getElementById('v-lh').textContent=S.lineHeight.toFixed(1);
+  document.getElementById('prompter-text').style.lineHeight=S.lineHeight;
+  computeMetrics();saveSettings();
+}
+
+// Word spacing
+function onWordSpacing(v){
+  S.wordSpacing=parseInt(v);
+  document.getElementById('v-ws').textContent=v+'px';
+  document.getElementById('prompter-text').style.wordSpacing=v+'px';
+  computeMetrics();saveSettings();
+}
+
+// Letter spacing
+function onLetterSpacing(v){
+  S.letterSpacing=parseInt(v);
+  document.getElementById('v-ls').textContent=v+'px';
+  document.getElementById('prompter-text').style.letterSpacing=v+'px';
+  computeMetrics();saveSettings();
+}
+
+// Colors
+function onTextColor(v){
+  S.textColor=v;
+  document.getElementById('prompter-text').style.color=v;
+  document.querySelectorAll('[data-p]').forEach(b=>b.classList.remove('on'));
+  saveSettings();
+}
+function onBgColor(v){
+  S.bgColor=v;
+  ['prompter-text','prompter-scroll','prompter-view'].forEach(id=>{
+    document.getElementById(id).style.background=v;
+  });
+  document.querySelectorAll('[data-p]').forEach(b=>b.classList.remove('on'));
+  saveSettings();
+}
+function applyPreset(key,btn){
+  const p=PRESETS[key];
+  S.textColor=p.text; S.bgColor=p.bg;
+  document.getElementById('clr-text').value=p.text;
+  document.getElementById('clr-bg').value=p.bg;
+  document.querySelectorAll('[data-p]').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  onTextColor(p.text); onBgColor(p.bg);
+}
+
+// Margin
+function onMargin(v){
+  S.marginX=parseInt(v);
+  document.getElementById('v-mg').textContent=v+'px';
+  if(!S.centerZone){
+    document.getElementById('prompter-text').style.paddingLeft=v+'px';
+    document.getElementById('prompter-text').style.paddingRight=v+'px';
+  }
+  computeMetrics();saveSettings();
+}
+
+// Alignment
+function setAlign(a,btn){
+  S.align=a;
+  document.querySelectorAll('[data-a]').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('prompter-text').style.textAlign=a;
+  saveSettings();
+}
+
+// Center zone
+function onCenterZone(v){
+  S.centerZone=v;applyStyles();computeMetrics();saveSettings();
+}
+
+// Mirror
+function applyMirror(){
+  S.mirrorH=document.getElementById('tog-mh').checked;
+  S.mirrorV=document.getElementById('tog-mv').checked;
+  const mx=S.mirrorH?'scaleX(-1)':'';
+  const my=S.mirrorV?'scaleY(-1)':'';
+  document.getElementById('prompter-view').style.transform=[mx,my].filter(Boolean).join(' ')||'none';
+  saveSettings();
+}
+
+// Countdown
+function setCountdown(v,btn){
+  S.countdown=v;
+  document.querySelectorAll('[data-cd]').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  saveSettings();
+}
+
+// Reading guide
+function onReadingGuide(v){
+  S.readingGuide=v;
+  document.getElementById('row-rgp').style.display=v?'flex':'none';
+  document.getElementById('reading-guide').style.display=v?'block':'none';
+  saveSettings();
+}
+function onReadingGuidePos(v){
+  S.readingGuidePos=parseInt(v);
+  document.getElementById('v-rgp').textContent=v+'%';
+  document.getElementById('reading-guide').style.top=v+'vh';
+  document.getElementById('line-highlight').style.top=v+'vh';
+  saveSettings();
+}
+
+// Line highlight
+function onLineHighlight(v){
+  S.lineHighlight=v;
+  const el=document.getElementById('line-highlight');
+  el.style.display=v?'block':'none';
+  if(v){el.style.top=S.readingGuidePos+'vh';el.style.height=(S.fontSize*S.lineHeight)+'px';}
+  saveSettings();
+}
+
+// Timed mode
+function onTimedMode(v){
+  S.timedMode=v;
+  document.getElementById('row-tm').style.display=v?'flex':'none';
+  if(v) recalcTimedSpeed();
+  saveSettings();
+}
+function recalcTimedSpeed(){
+  S.timedMin=parseFloat(document.getElementById('inp-tm').value)||5;
+  if(S.timedMode && totalH>0){
+    const spd=Math.max(20,Math.min(300,Math.round(totalH/(S.timedMin*60))));
+    onSpeed(spd);
+  }
+  saveSettings();
+}
+
+// Wake lock
+async function requestWL(){
+  if(!('wakeLock' in navigator)) return;
+  try{wakeSentinel=await navigator.wakeLock.request('screen');}catch(e){}
+}
+function releaseWL(){
+  if(wakeSentinel){wakeSentinel.release();wakeSentinel=null;}
+}
+function onWakeLock(v){
+  S.wakeLock=v;
+  if(v) requestWL(); else releaseWL();
+  saveSettings();
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible' && S.wakeLock) requestWL();
+});
+
+// ═══════════════════════════════════════════════════════════════
+// KEYBOARD
+// ═══════════════════════════════════════════════════════════════
+function setupKeyboard(){
+  document.addEventListener('keydown',e=>{
+    if(document.activeElement===document.getElementById('script-input')) return;
+    if(S.locked) return;
+    switch(e.code){
+      case 'Space': e.preventDefault(); togglePlayPause(); break;
+      case 'ArrowUp': e.preventDefault(); adjustSpeed(1); break;
+      case 'ArrowDown': e.preventDefault(); adjustSpeed(-1); break;
+      case 'KeyR': restartPrompter(); break;
+      case 'KeyH': toggleControls(); break;
+      case 'Escape':
+        if(document.getElementById('settings-overlay').classList.contains('open'))
+          closeSettings();
+        break;
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TOUCH GESTURES ON PROMPTER
+// ═══════════════════════════════════════════════════════════════
+(()=>{
+  const scr=document.getElementById('prompter-scroll');
+
+  scr.addEventListener('touchstart',e=>{
+    if(S.locked) return;
+    tCount=e.touches.length;
+    tStart=e.touches[0].clientY;
+    tLastY=tStart;
+    tY=Date.now();
+    touchScrolling=true;
+  },{passive:true});
+
+  scr.addEventListener('touchmove',e=>{
+    if(S.locked||!touchScrolling) return;
+    const cy=e.touches[0].clientY;
+    const dy=tLastY-cy;
+    tLastY=cy;
+
+    if(S.playing){
+      // Swipe up = faster, down = slower
+      S.speed=Math.max(20,Math.min(300,S.speed+dy*0.6));
+      document.getElementById('sl-sp').value=S.speed;
+      document.getElementById('v-sp').textContent=Math.round(S.speed);
+      refreshSpeedBadge();
+    } else {
+      // Manual scroll
+      S.scrollY=Math.max(0,Math.min(totalH,S.scrollY+dy));
+      applyScroll();
+      refreshProgress();
+    }
+  },{passive:true});
+
+  scr.addEventListener('touchend',e=>{
+    if(S.locked) return;
+    const dur=Date.now()-tY;
+    const dist=Math.abs(tStart-tLastY);
+
+    // Tap (no scroll) = peek controls
+    if(dur<280 && dist<12 && tCount===1){
+      peekControls();
+    }
+
+    // Two-finger tap = play/pause
+    if(tCount>=2 && dur<300){
+      togglePlayPause();
+    }
+
+    touchScrolling=false;
+    tCount=e.touches.length;
+  },{passive:true});
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// RESIZE / ORIENTATION
+// ═══════════════════════════════════════════════════════════════
+window.addEventListener('resize',()=>{
+  computeMetrics();
+  if(S.centerZone) applyStyles();
+});
+
+// ═══════════════════════════════════════════════════════════════
+// GO
+// ═══════════════════════════════════════════════════════════════
+boot();
+</script>
+</body>
+</html>
