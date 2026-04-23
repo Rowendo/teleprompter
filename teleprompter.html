@@ -306,6 +306,16 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none}
 #cue-flash.flash{animation:cueflash .9s ease-out forwards}
 @keyframes cueflash{0%{opacity:1}60%{opacity:.7}100%{opacity:0}}
 
+/* ─── SHOW-UI KNOP (altijd zichtbaar als controls verborgen zijn) */
+#show-ui-btn{
+  position:absolute;top:16px;right:16px;z-index:150;
+  width:40px;height:40px;border-radius:50%;border:none;
+  background:rgba(255,255,255,.15);color:#fff;font-size:17px;
+  cursor:pointer;display:none;align-items:center;justify-content:center;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+}
+#show-ui-btn.visible{display:flex}
+
 /* ─── LOCK SCREEN ─────────────────────────────────────────────── */
 #lock-overlay{position:fixed;inset:0;z-index:300;display:none}
 #lock-overlay.active{display:block}
@@ -402,6 +412,9 @@ input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none}
   </div>
 
   <div id="progress-track"><div id="progress-bar"></div></div>
+
+  <!-- Altijd-zichtbare knop als UI verborgen is -->
+  <button id="show-ui-btn" onclick="showControls()" title="Toon bediening">👁</button>
 
   <!-- Top bar -->
   <div id="prompter-topbar">
@@ -1021,17 +1034,19 @@ function toggleControls(){
   applyControlsVis();
 }
 
+function showControls(){
+  S.controlsVis=true;
+  applyControlsVis();
+}
+
 function applyControlsVis(){
   document.getElementById('controls-overlay').classList.toggle('hidden',!S.controlsVis);
   document.getElementById('prompter-topbar').classList.toggle('hidden',!S.controlsVis);
+  document.getElementById('show-ui-btn').classList.toggle('visible',!S.controlsVis);
 }
 
 function peekControls(){
-  // Tappen als controls verborgen zijn = permanent terugbrengen
-  if(!S.controlsVis){
-    S.controlsVis=true;
-    applyControlsVis();
-  }
+  if(!S.controlsVis) showControls();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1405,6 +1420,12 @@ function setupKeyboard(){
     applyScroll();
     refreshProgress();
   },{passive:true});
+
+  // Ook klikken (muis/desktop) brengt UI terug
+  scr.addEventListener('click',e=>{
+    if(S.locked) return;
+    if(!S.controlsVis) showControls();
+  });
 
   scr.addEventListener('touchend',e=>{
     if(S.locked) return;
